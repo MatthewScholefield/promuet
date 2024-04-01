@@ -9,8 +9,8 @@ from .prompt_flow import PromptFlow, VarType
 
 
 class AppFlow:
-    def __init__(self, client: OpenAI = OpenAI(), session_path: Optional[str] = None, debug: bool = False):
-        self.client = client
+    def __init__(self, client: OpenAI = None, session_path: Optional[str] = None, debug: bool = False):
+        self.client = client or OpenAI()
         self.session_path = Path(session_path) if session_path else None
         self.session: dict[str, VarType] = self.load_session()
         self.debug = debug
