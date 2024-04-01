@@ -33,7 +33,6 @@ class CachedChatClient(ChatClientBase):
         self.cache_path = cache_path
         self.cache = json.loads(cache_path.read_text()) if cache_path.is_file() else {}
         self.client = client
-        self.cache = {}
 
     def predict(self, messages: list[dict]) -> str:
         key = md5(
