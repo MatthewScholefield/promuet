@@ -3,14 +3,19 @@ from pathlib import Path
 import sys
 from typing import Optional
 
-from openai import OpenAI
+from .ai_client import ChatClientBase, OpenAiChatClient
 
 from .prompt_flow import PromptFlow, VarType
 
 
 class AppFlow:
-    def __init__(self, client: OpenAI = None, session_path: Optional[str] = None, debug: bool = False):
-        self.client = client or OpenAI()
+    def __init__(
+        self,
+        client: ChatClientBase = None,
+        session_path: Optional[str] = None,
+        debug: bool = False,
+    ):
+        self.client = client or OpenAiChatClient()
         self.session_path = Path(session_path) if session_path else None
         self.session: dict[str, VarType] = self.load_session()
         self.debug = debug
@@ -33,7 +38,7 @@ class AppFlow:
 
     def run_prompt(self, prompt: PromptFlow, extra_args: dict = None):
         self.session.update(extra_args or {})
-        new_vars = prompt.run(self.session)
+        new_vars = prompt.run(self.session, self.client)
         self.session.update(new_vars)
         self.save_session()
         for key, value in new_vars.items():
@@ -46,21 +51,21 @@ class AppFlow:
             self._debug('\n### {} ###'.format(key))
             self._debug(value)
             self._debug()
-    
+
     def __getitem__(self, key: str) -> VarType:
         return self.session[key]
 
     def __setitem__(self, key: str, value: VarType):
         self.session[key] = value
         self.save_session()
-    
+
     def __delitem__(self, key: str):
         del self.session[key]
         self.save_session()
-    
+
     def __contains__(self, key: str) -> bool:
         return key in self.session
-    
+
     def _debug(self, *args, **kwargs):
         if self.debug:
             sys.stdout.write(*args, **kwargs)

@@ -63,7 +63,10 @@ def test_match_item_list():
     data = extract_data_vars(rdata)
     assert data == {
         'relates_to': 'hamburgers',
-        'tasks': [{'num': 1, 'title': 'Do something'}, {'num': 2, 'title': 'Something else'}],
+        'tasks': [
+            {'num': 1, 'title': 'Do something'},
+            {'num': 2, 'title': 'Something else'},
+        ],
         'note': 'These are the tasks.',
     }, json.dumps(rdata, indent=4)
 

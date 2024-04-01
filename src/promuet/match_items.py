@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import textwrap
-from typing import Any
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -97,13 +97,19 @@ class VariableMatchItem(MatchItem):
 
 
 class ListMatchItem(MatchItem):
-    template_regex = r'\[\[:(?P<list_name>\w+):\]\](?P<template_content>.*?)\[\[:\2:\]\]'
+    template_regex = (
+        r'\[\[:(?P<list_name>\w+):\]\](?P<template_content>.*?)\[\[:\2:\]\]'
+    )
 
     def __init__(self, template_match: re.Match, regex_builder: RegexBuilder):
         super().__init__(template_match.string, regex_builder)
         self.var_name = template_match.group('list_name')
-        self.item_template = TemplateMatchItem(template_match.group('template_content'), regex_builder)
-        regex, self.group_name = regex_builder.new_capture_group(f'(?:{self.item_template.match_regex})+')
+        self.item_template = TemplateMatchItem(
+            template_match.group('template_content'), regex_builder
+        )
+        regex, self.group_name = regex_builder.new_capture_group(
+            f'(?:{self.item_template.match_regex})+'
+        )
         self.match_regex = regex
 
     def remove_named_groups(self, pattern: str) -> str:
@@ -135,13 +141,16 @@ class TemplateMatchItem(MatchItem):
         template = textwrap.dedent(template).strip()
         super().__init__(template, regex_builder)
         unified_pattern = '|'.join(
-            f'(?P<{cls.__name__}>{cls.template_regex})' for cls in [ListMatchItem, VariableMatchItem]
+            f'(?P<{cls.__name__}>{cls.template_regex})'
+            for cls in [ListMatchItem, VariableMatchItem]
         )
         self.children: list[MatchItem] = []
         last_pos = 0
         for match in re.finditer(unified_pattern, template, re.DOTALL):
             if match.start() != last_pos:
-                literal = LiteralMatchItem(template[last_pos : match.start()], regex_builder)
+                literal = LiteralMatchItem(
+                    template[last_pos : match.start()], regex_builder
+                )
                 self.children.append(literal)
 
             for cls in [ListMatchItem, VariableMatchItem]:
@@ -155,7 +164,9 @@ class TemplateMatchItem(MatchItem):
             self.children.append(literal)
 
         combined_regex = ''.join([child.match_regex for child in self.children])
-        self.match_regex, self.group_name = regex_builder.new_capture_group(combined_regex)
+        self.match_regex, self.group_name = regex_builder.new_capture_group(
+            combined_regex
+        )
 
     def extract(self, match: re.Match) -> dict[str, VarType]:
         result = {'.str': match.group()}
@@ -166,6 +177,16 @@ class TemplateMatchItem(MatchItem):
 
     def parse(self, input_string: str) -> dict[str, int | list[str] | str]:
         return super().parse(textwrap.dedent(input_string))
+
+    def get_from_cache(self, cache: dict[str, VarType]) -> dict[str, VarType] | None:
+        var_names = [
+            x.var_name
+            for x in self.children
+            if isinstance(x, VariableMatchItem | ListMatchItem)
+        ]
+        if all(x in cache for x in var_names):
+            return {x: cache[x] for x in var_names}
+        return None
 
 
 def parse_template(template: str, input_string: str) -> dict[str, VarType]:
@@ -191,7 +212,9 @@ def serialize_template(template: str, variables: dict[str, VarType]) -> str:
         if var_name not in variables:
             raise MissingVariableError(template, variables, var_name)
         if not isinstance(variables[var_name], int | str):
-            logger.warning('Formatting for list type not implemented ("{}" variable)', var_name)
+            logger.warning(
+                'Formatting for list type not implemented ("{}" variable)', var_name
+            )
         return str(variables[var_name])
 
     return re.sub(r'{{(.*?)}}', format_var, template)
