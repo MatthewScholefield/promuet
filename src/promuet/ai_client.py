@@ -36,7 +36,7 @@ class CachedChatClient(ChatClientBase):
 
     def predict(self, messages: list[dict]) -> str:
         key = md5(
-            self.client.cache_key + json.dumps(messages, sort_keys=True).encode()
+            (self.client.cache_key + json.dumps(messages, sort_keys=True)).encode()
         ).hexdigest()
         if key not in self.cache:
             self.cache[key] = self.client.predict(messages)
