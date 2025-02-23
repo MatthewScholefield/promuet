@@ -7,14 +7,14 @@ from typing import Any, Optional
 
 from loguru import logger
 
-VarType = int | list[str] | dict[str, 'VarType'] | str
+VarType = int | list['VarType'] | dict[str, 'VarType'] | str
 
 
 class RegexBuilder:
     def __init__(self):
         self.counter = 0
 
-    def new_capture_group(self, inner_regex: str) -> tuple[str, str | None]:
+    def new_capture_group(self, inner_regex: str) -> tuple[str, str]:
         self.counter += 1
         group_name = f'group_{self.counter}'
         return f'(?P<{group_name}>{inner_regex})', group_name
@@ -54,7 +54,7 @@ class LiteralMatchItem(MatchItem):
         )
         self.group_name = None
 
-    def extract(self, _match: re.Match) -> dict[str, VarType]:
+    def extract(self, match: re.Match) -> dict[str, VarType]:
         return {}
 
 
@@ -70,6 +70,7 @@ class VariableMatchItem(MatchItem):
         self.match_regex, self.group_name = regex_builder.new_capture_group(regex)
 
     def extract(self, match: re.Match) -> dict[str, VarType]:
+        assert self.group_name
         value = match.group(self.group_name)
         parsed_value = self._parse(value)
         new_vars = {self.var_name: parsed_value}
@@ -104,11 +105,11 @@ class ListMatchItem(MatchItem):
     def __init__(self, template_match: re.Match, regex_builder: RegexBuilder):
         super().__init__(template_match.string, regex_builder)
         self.var_name = template_match.group('list_name')
-        self.item_template = TemplateMatchItem(
-            template_match.group('template_content'), regex_builder
-        )
+        template_content = template_match.group('template_content')
+        self.item_template = TemplateMatchItem(template_content, regex_builder)
+        self.template_suffix = '\n*' if template_content.endswith('\n') else ''
         regex, self.group_name = regex_builder.new_capture_group(
-            f'(?:{self.item_template.match_regex})+'
+            f'(?:{self.item_template.match_regex}{self.template_suffix})+'
         )
         self.match_regex = regex
 
@@ -116,12 +117,13 @@ class ListMatchItem(MatchItem):
         return re.sub(r'\(\?P<[^>]+>', '(?:', pattern)
 
     def extract(self, match: re.Match) -> dict[str, VarType]:
+        assert self.group_name
         items = []
         original_text = match.group(self.group_name)
 
         pattern = self.item_template.match_regex
-        lookahead_pattern = self.remove_named_groups(pattern)
-        combined_pattern = f'({pattern})(?=(?:{lookahead_pattern}|$))'
+        lookahead_pattern = self.remove_named_groups(pattern) + self.template_suffix
+        combined_pattern = f'({pattern}{self.template_suffix})(?=(?:{lookahead_pattern}|$))'
 
         pos = 0
         while pos < len(original_text):
@@ -136,7 +138,7 @@ class ListMatchItem(MatchItem):
 
 
 class TemplateMatchItem(MatchItem):
-    def __init__(self, template: str, regex_builder: RegexBuilder = None):
+    def __init__(self, template: str, regex_builder: Optional[RegexBuilder] = None):
         regex_builder = regex_builder or RegexBuilder()
         template = textwrap.dedent(template).strip()
         super().__init__(template, regex_builder)
@@ -175,7 +177,7 @@ class TemplateMatchItem(MatchItem):
                 result.update(child.parse(match.group(child.group_name)))
         return result
 
-    def parse(self, input_string: str) -> dict[str, int | list[str] | str]:
+    def parse(self, input_string: str) -> dict[str, VarType]:
         return super().parse(textwrap.dedent(input_string))
 
     def get_from_cache(self, cache: dict[str, VarType]) -> dict[str, VarType] | None:
@@ -208,7 +210,7 @@ def serialize_template(template: str, variables: dict[str, VarType]) -> str:
     def format_var(match: re.Match) -> str:
         var_name: str = match.group(1).split(':')[0].strip()
         if var_name + '.str' in variables:
-            return variables[var_name + '.str']
+            return str(variables[var_name + '.str'])
         if var_name not in variables:
             raise MissingVariableError(template, variables, var_name)
         if not isinstance(variables[var_name], int | str):

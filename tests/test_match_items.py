@@ -26,7 +26,7 @@ def test_match_items():
         - Laundry should be folded
     """
     data = template.parse(input_string)
-    assert data['.str'].strip() == textwrap.dedent(input_string).strip()
+    assert str(data['.str']).strip() == textwrap.dedent(input_string).strip()
     data = extract_data_vars(data)
     assert data == {
         'task_number': 12,
@@ -106,7 +106,7 @@ Note: ...
 """
 
     data = template.parse(input_string)
-    features = data['app_mvp_features']
+    features: list[dict] = data['app_mvp_features']  # type: ignore
     assert len(features) == 3
     assert [x['title'] for x in features] == [
         'Virtual Hacking World',

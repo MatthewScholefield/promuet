@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from hashlib import md5
 import json
 from pathlib import Path
+from typing_extensions import Optional
 
 from openai import OpenAI
 
@@ -15,16 +16,16 @@ class ChatClientBase(ABC):
 
 
 class OpenAiChatClient(ChatClientBase):
-    def __init__(self, openai: OpenAI = None, completion_kwargs: dict = None):
+    def __init__(self, openai: Optional[OpenAI] = None, model: Optional[str] = None, completion_kwargs: Optional[dict] = None):
         self.client = openai or OpenAI()
         self.kwargs = completion_kwargs or {}
-        self.kwargs.setdefault('model', 'gpt-3.5-turbo')
+        self.kwargs.setdefault('model', model or 'gpt-4o-mini')
         self.cache_key = md5(
             json.dumps(self.kwargs, sort_keys=True).encode()
         ).hexdigest()
 
     def predict(self, messages: list[dict]) -> str:
-        response = self.client.chat.completions.create(messages=messages, **self.kwargs)
+        response = self.client.chat.completions.create(messages=messages, **self.kwargs)  # type: ignore
         return response.choices[0].message.content
 
 

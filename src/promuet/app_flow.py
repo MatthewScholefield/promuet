@@ -1,21 +1,29 @@
 import json
+from os import PathLike
 from pathlib import Path
 import sys
-from typing import Optional
+from typing import Optional, Type, Union
+from typing_extensions import TypeVar
 
 from .ai_client import ChatClientBase, OpenAiChatClient
 
-from .prompt_flow import PromptFlow, VarType
+from .prompt_flow import Prompt, PromptFlow, VarType
+
+
+T = TypeVar('T', bound=Union[str, int, list, dict])
 
 
 class AppFlow:
     def __init__(
         self,
-        client: ChatClientBase = None,
-        session_path: Optional[str] = None,
+        /,
+        model: Optional[str] = None,
+        client: Optional[ChatClientBase] = None,
+        session_path: Optional[Union[str, Path]] = None,
         debug: bool = False,
     ):
-        self.client = client or OpenAiChatClient()
+        assert not (model and client), "Either model or client must be provided"
+        self.client = client or OpenAiChatClient(model=model)
         self.session_path = Path(session_path) if session_path else None
         self.session: dict[str, VarType] = self.load_session()
         self.debug = debug
@@ -36,9 +44,10 @@ class AppFlow:
         if field_name not in self.session:
             self.session[field_name] = input(prompt_message).rstrip('.')
 
-    def run_prompt(self, prompt: PromptFlow, extra_args: dict = None):
+    def run_prompt(self, prompt: PromptFlow | Prompt, extra_args: Optional[dict] = None):
         self.session.update(extra_args or {})
-        new_vars = prompt.run(self.session, self.client)
+        prompt_flow = PromptFlow(prompt) if isinstance(prompt, Prompt) else prompt
+        new_vars = prompt_flow.run(self.session, self.client)
         self.session.update(new_vars)
         self.save_session()
         for key, value in new_vars.items():
@@ -59,6 +68,12 @@ class AppFlow:
         self.session[key] = value
         self.save_session()
 
+    def get_var[T](self, key: str, cls: Type[T]) -> T:
+        """Same as ['key'] but with type checking"""
+        value = self.session[key]
+        assert isinstance(value, cls), f'{key}: {value} is not an instance of {cls}'
+        return value
+
     def __delitem__(self, key: str):
         del self.session[key]
         self.save_session()
@@ -66,7 +81,7 @@ class AppFlow:
     def __contains__(self, key: str) -> bool:
         return key in self.session
 
-    def _debug(self, *args, **kwargs):
+    def _debug(self, *args):
         if self.debug:
-            sys.stdout.write(*args, **kwargs)
+            sys.stdout.write(' '.join(str(arg) for arg in args) + '\n')
             sys.stdout.flush()
